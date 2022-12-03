@@ -1,25 +1,10 @@
 import pprint
-from os.path import dirname, abspath
 from playwright.sync_api import sync_playwright, Page
 from datetime import datetime as dt
-
-CURR_DIR = dirname(abspath(__file__))
+from config import *
 
 
 class JobsPage:
-    url = "https://www.sqlink.com/career/db/פיתוח-אוטומציה/?page="
-
-    # ================ DATA SETUP ==================
-    cv_file = f"{CURR_DIR}/TEST_CV.docx"
-    submit_log_file = f"{CURR_DIR}/submit_log.log"
-    seen_jobs_file = f"{CURR_DIR}/seen_jobs.log"
-
-    # =============== KEY WORDS SETUP ==============
-    key_words = ["אוטומציה", "automation", " engineer", "selenium", "aws", "linux", "backend", "api", "docker",
-                 "html", "css", "web", "rest", "gui", "ui", "playwright", "pytest"]
-    languages = ["python", "#c", "java", "javascript", "node.js", ".net"]
-    desired_language = "python"
-    avoid_key_words = ["leader", "senior", "בצפון", "הצפון"]
 
     # =========== PAGE ELEMENTS ====================
     job_box_element = '//div[@class="col10"]'
@@ -30,7 +15,7 @@ class JobsPage:
 
     def __init__(self, page: Page, page_number: int):
         self.page = page
-        self.curr_page_url = f"{self.url}{page_number}"
+        self.curr_page_url = f"{URL}{page_number}"
         self.page_number = page_number
         self.valid_jobs = []
         self.invalid_jobs = []
@@ -43,9 +28,10 @@ class JobsPage:
     def get_job_id(word_list: list[str]) -> str:
         return word_list[word_list.index("משרה:") + 1]
 
-    def get_list_of_seen_jobs(self) -> list:
+    @staticmethod
+    def get_list_of_seen_jobs() -> list:
         try:
-            with open(self.seen_jobs_file, "r") as f:
+            with open(SEEN_JOBS_FILE, "r") as f:
                 return [line.replace("\n", "") for line in f.readlines()]
         except FileNotFoundError:
             return []
@@ -53,13 +39,13 @@ class JobsPage:
     def filter_jobs(self, job_box, index: int) -> dict:
         word_list = self.clean_text(job_box.text_content())
 
-        keywords = [key for key in self.key_words if key in word_list]
-        languages = [lang for lang in self.languages if lang in word_list]
-        avoid = [key for key in self.avoid_key_words if key in word_list]
+        keywords = [key for key in KEY_WORDS if key in word_list]
+        languages = [lang for lang in LANGUAGES if lang in word_list]
+        avoid = [key for key in AVOID_KEY_WORDS if key in word_list]
 
         conditions = [
             not avoid,
-            not languages or self.desired_language in languages,
+            not languages or DESIRED_LANGUAGES in languages,
             len(keywords) > 0
         ]
 
@@ -90,7 +76,7 @@ class JobsPage:
             if result.get("id") in seen_jobs:
                 continue
             else:
-                with open(self.seen_jobs_file, "a") as f:
+                with open(SEEN_JOBS_FILE, "a") as f:
                     f.writelines(f"{result.get('id')}\n")
 
             if result.get("is_valid"):
@@ -106,10 +92,10 @@ class JobsPage:
             box_index = job.get("index")
 
             job_boxes[box_index].query_selector(self.send_cv_btn).click()
-            self.page.set_input_files(selector=self.upload_cv_btn, files=self.cv_file)
+            self.page.set_input_files(selector=self.upload_cv_btn, files=CV_FILE)
             self.page.locator(self.submit_cv_btn).click()
 
-            with open(self.submit_log_file, "a") as f:
+            with open(SUBMIT_LOG_FILE, "a") as f:
                 f.writelines(f"Sending cv to job index number: {box_index} | "
                              f"Page Number: {self.page_number} | "
                              f"job id: {job.get('id')} | "
@@ -132,6 +118,8 @@ class Bot:
     @classmethod
     def run_bot(cls, is_headless: bool) -> None:
 
+        print("Bot Initializing...\n")
+
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=is_headless)
             context = browser.new_context()
@@ -140,6 +128,8 @@ class Bot:
             page_number = 1
 
             while True:
+                print(f"Running page number: {page_number}\n")
+
                 bot = JobsPage(page=page, page_number=page_number)
                 bot.get_jobs_from_page()
                 bot.submit_jobs()
@@ -154,4 +144,4 @@ class Bot:
 
 
 if __name__ == '__main__':
-    Bot.run_bot(is_headless=True)
+    Bot.run_bot(is_headless=HEADLESS)
